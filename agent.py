@@ -1,4 +1,3 @@
-
 import streamlit as st
 import re
 import numpy as np
@@ -120,8 +119,8 @@ def execute_viz_code(code_string):
     
     local_vars = {'np': np, 'plt': plt, 'go': go, 'px': px, 'st': st}
     try:
-        # Using a restricted global/local dict for execution
-        exec(clean_code, globals(), local_vars)
+        # Use only local_vars dict for isolated execution
+        exec(clean_code, local_vars)
         return local_vars.get('fig')
     except Exception as e:
         return f"Visualization Engine Error: {str(e)}"
@@ -138,8 +137,8 @@ def render_nexus_content(text):
             
         if "```python" in segment:
             with st.expander("🛠 Simulation Source Code", expanded=False):
-                st.code(segment.replace("
-```python", "").replace("```", "").strip(), language='python')
+                display_code = segment.replace("```python", "").replace("```", "").strip()
+                st.code(display_code, language='python')
             
             fig = execute_viz_code(segment)
             if isinstance(fig, (go.Figure, plt.Figure)):
@@ -181,14 +180,14 @@ if prompt := st.chat_input("Enter research topic..."):
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     system_instruction=SYSTEM_PROMPT,
-                    tools=[{"google_search": {}}],
                     temperature=temp,
                 )
             )
             
             for chunk in stream:
-                full_response += chunk.text
-                response_placeholder.markdown(full_response + "▌")
+                if chunk.text:
+                    full_response += chunk.text
+                    response_placeholder.markdown(full_response + "▌")
             
             # Finalize rendering
             response_placeholder.empty()
