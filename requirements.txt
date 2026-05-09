@@ -1,5 +1,4 @@
 matplotlib
 plotly
 google
-genai
 google-adk
