@@ -1,4 +1,3 @@
-
 import streamlit as st
 import re
 import numpy as np
@@ -19,150 +18,145 @@ st.set_page_config(
 # --- CUSTOM SCIENTIFIC UI ---
 st.markdown("""
 <style>
+    /* Main Background and Fonts */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=JetBrains+Mono&display=swap');
     
-    :root {
-        --nexus-cyan: #00d4ff;
-        --nexus-bg: #0e1117;
-        --nexus-card: #161b22;
-        --nexus-border: #30363d;
-    }
-
     html, body, [class*="st-"] {
         font-family: 'Inter', sans-serif;
     }
 
     .main {
-        background-color: var(--nexus-bg);
+        background-color: #0e1117;
     }
 
+    /* Science Style Headings */
     h1, h2, h3 {
-        color: var(--nexus-cyan) !important;
+        color: #00d4ff !important;
         font-weight: 600 !important;
         letter-spacing: -0.5px;
-        text-shadow: 0 0 15px rgba(0, 212, 255, 0.2);
     }
 
+    /* The Derivation Box */
     .derivation-container {
         background-color: #1a1c24;
-        border-left: 5px solid var(--nexus-cyan);
-        padding: 25px;
+        border-left: 5px solid #00d4ff;
+        padding: 20px;
         border-radius: 8px;
-        margin: 25px 0;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        margin: 20px 0;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
     }
     
     .derivation-title {
-        color: var(--nexus-cyan);
+        color: #00d4ff;
         font-family: 'JetBrains Mono', monospace;
-        font-size: 0.75rem;
+        font-size: 0.9rem;
         text-transform: uppercase;
-        letter-spacing: 2px;
-        margin-bottom: 15px;
+        margin-bottom: 10px;
         display: block;
-        opacity: 0.8;
     }
 
+    /* Chat Styling */
     .stChatMessage {
-        background-color: var(--nexus-card) !important;
-        border: 1px solid var(--nexus-border) !important;
-        border-radius: 12px !important;
-        margin-bottom: 1rem !important;
+        background-color: #161b22 !important;
+        border-radius: 15px !important;
+        padding: 1rem !important;
+        border: 1px solid #30363d !important;
+    }
+
+    /* Code Blocks */
+    code {
+        color: #ff79c6 !important;
+        background-color: #282a36 !important;
+        padding: 2px 5px !important;
+        border-radius: 4px;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/2103/2103633.png", width=60)
-    st.title("Nexus Terminal")
-    st.caption("v2.1 | Scientific Research Agent")
+    st.image("https://cdn-icons-png.flaticon.com/512/2103/2103633.png", width=80)
+    st.title("Nexus Research")
     st.markdown("---")
-    
-    api_key = st.text_input("🔑 Google API Key", type="password", placeholder="Paste Gemini API key...")
-    st.markdown("[Get API Key](https://aistudio.google.com/app/apikey)")
+    st.markdown("### 🔑 Authentication")
+    st.markdown("[Get Free Google API Key](https://aistudio.google.com/app/apikey)")
+    api_key = st.text_input("Enter API Key", type="password", placeholder="Paste key here...")
     
     st.markdown("---")
-    mode = st.selectbox("Focus Area", ["Comprehensive", "Theoretical Physics", "Quantitative Math", "Historical Tech"])
-    temp = st.slider("Response Creativity", 0.0, 1.0, 0.2)
+    st.markdown("### 🛠 Mode")
+    mode = st.radio("Focus Area", ["Comprehensive", "Math/Physics", "Historical"])
     
-    if st.button("🗑 Clear Session", use_container_width=True):
+    if st.button("🗑 Clear Session"):
         st.session_state.messages = []
         st.rerun()
 
 # --- SYSTEM PROMPT ---
-SYSTEM_PROMPT = f"""
-You are 'Nexus', a high-end Scientific AI Agent. 
-Current Focus: {mode}
+SYSTEM_PROMPT = """
+You are 'Nexus', a high-end Scientific AI Agent. Your goal is to provide deep, interactive research.
 
-RULES:
-1. **Visuals:** You MUST generate a simulation using Plotly for motion/data. 
-   - Code must be in a standard ```python block.
-   - Assign the result to a variable named `fig`.
-   - Use `fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')`.
-2. **Derivations:** Wrap math proofs in:
+RULES FOR INTERACTIVITY:
+1. **Formatting:** Never write in long, boring paragraphs. Use bullet points and bold keywords. 
+2. **Derivations:** Whenever you explain math or physics, wrap the derivation in a special HTML block:
    <div class="derivation-container">
    <span class="derivation-title">Mathematical Derivation</span>
-   [Double dollar LaTeX here]
+   [Insert LaTeX math here]
    </div>
-3. **Formatting:** Use bold headers and bullet points. No walls of text.
-4. **Media:** Start with one relevant Wikimedia image link: ![Image](url).
+3. **LaTeX:** Always use double dollar signs for centered math: $$E = mc^2$$.
+4. **Visuals:** You MUST generate a simulation if the topic involves motion, data, or logic. 
+   - Use Plotly for interactive charts.
+   - Assign the result to a variable named `fig`.
+   - Only use these Plotly symbols: ['circle', 'square', 'diamond', 'cross', 'x'].
+5. **Images:** Include at least one high-quality image link from Wikimedia at the start of your research.
 """
 
 # --- LOGIC FUNCTIONS ---
-def execute_viz_code(code_string):
-    """Clean and execute Python code safely."""
-    # Robustly extract code between backticks if they exist
-    if "```python" in code_string:
-        clean_code = code_string.split("```python")[1].split("```")[0].strip()
-    else:
-        clean_code = code_string.strip()
-    
+def execute_viz_code(code):
     local_vars = {'np': np, 'plt': plt, 'go': go, 'px': px, 'st': st}
     try:
-        # Use only local_vars dict for isolated execution
-        exec(clean_code, local_vars)
+        exec(code, globals(), local_vars)
         return local_vars.get('fig')
     except Exception as e:
-        return f"Visualization Engine Error: {str(e)}"
+        return f"Error: {str(e)}"
 
-def render_nexus_content(text):
-    """Parses and renders complex segments of the research output."""
-    # Split content into segments (Text vs Code vs Derivations)
+def render_content(text):
+    """Parses and renders text, HTML-wrapped derivations, and code blocks."""
+    # Split text into segments: standard text, HTML-divs (derivations), and Python code
+    # We use a broader regex to capture our custom div blocks and code blocks
     pattern = r'(```python.*?```|<div class="derivation-container">.*?</div>)'
     segments = re.split(pattern, text, flags=re.DOTALL)
 
     for segment in segments:
-        if not segment.strip():
-            continue
-            
-        if "```python" in segment:
+        if segment.startswith('```python'):
+            code = segment.replace('```python', '').replace('```', '').strip()
             with st.expander("🛠 Simulation Source Code", expanded=False):
-                display_code = segment.replace("```python", "").replace("```", "").strip()
-                st.code(display_code, language='python')
-            
-            fig = execute_viz_code(segment)
-            if isinstance(fig, (go.Figure, plt.Figure)):
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info(f"💡 Simulation Info: {fig}")
-                
-        elif 'class="derivation-container"' in segment:
+                st.code(code, language='python')
+            res = execute_viz_code(code)
+            if isinstance(res, (go.Figure, plt.Figure)):
+                st.plotly_chart(res, use_container_width=True) if isinstance(res, go.Figure) else st.pyplot(res)
+        elif segment.startswith('<div class="derivation-container">'):
+            # Render derivation with custom styling
             st.markdown(segment, unsafe_allow_html=True)
         else:
-            st.markdown(segment, unsafe_allow_html=True)
+            # Regular Markdown
+            if segment.strip():
+                st.markdown(segment, unsafe_allow_html=True)
 
 # --- CHAT INTERFACE ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+# Display history
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
-        render_nexus_content(msg["content"])
+        if msg["role"] == "assistant":
+            render_content(msg["content"])
+        else:
+            st.markdown(msg["content"])
 
-if prompt := st.chat_input("Enter research topic..."):
+# User Input
+if prompt := st.chat_input("Ask Nexus to research..."):
     if not api_key:
-        st.error("Nexus Error: API Key missing in sidebar.")
+        st.error("Please provide an API Key in the sidebar.")
         st.stop()
 
     st.session_state.messages.append({"role": "user", "content": prompt})
@@ -170,30 +164,19 @@ if prompt := st.chat_input("Enter research topic..."):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        response_placeholder = st.empty()
-        full_response = ""
-        
-        try:
-            client = genai.Client(api_key=api_key)
-            # Standard Gemini 2.0 Flash call
-            stream = client.models.generate_content_stream(
-                model='gemini-2.0-flash', 
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=SYSTEM_PROMPT,
-                    temperature=temp,
+        with st.spinner("Analyzing data streams..."):
+            try:
+                client = genai.Client(api_key=api_key)
+                response = client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        system_instruction=SYSTEM_PROMPT,
+                        tools=[{"google_search": {}}],
+                        temperature=0.2,
+                    )
                 )
-            )
-            
-            for chunk in stream:
-                if chunk.text:
-                    full_response += chunk.text
-                    response_placeholder.markdown(full_response + "▌")
-            
-            # Finalize rendering
-            response_placeholder.empty()
-            render_nexus_content(full_response)
-            st.session_state.messages.append({"role": "assistant", "content": full_response})
-            
-        except Exception as e:
-            st.error(f"Nexus Core Error: {e}")
+                render_content(response.text)
+                st.session_state.messages.append({"role": "assistant", "content": response.text})
+            except Exception as e:
+                st.error(f"Nexus encountered an error: {e}")
