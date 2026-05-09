@@ -1,6 +1,6 @@
+
 import streamlit as st
 import re
-import time
 import numpy as np
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
@@ -76,7 +76,7 @@ st.markdown("""
 with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/2103/2103633.png", width=60)
     st.title("Nexus Terminal")
-    st.caption("v2.2 | Scientific Research Agent")
+    st.caption("v2.1 | Scientific Research Agent")
     st.markdown("---")
     
     api_key = st.text_input("🔑 Google API Key", type="password", placeholder="Paste Gemini API key...")
@@ -85,12 +85,6 @@ with st.sidebar:
     st.markdown("---")
     mode = st.selectbox("Focus Area", ["Comprehensive", "Theoretical Physics", "Quantitative Math", "Historical Tech"])
     temp = st.slider("Response Creativity", 0.0, 1.0, 0.2)
-    
-    # Model selection for free tier flexibility
-    model = st.selectbox("Model", ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"])
-    
-    st.markdown("---")
-    st.caption("💡 **Free Tier Tips:**\n- Wait between queries\n- Use lower creativity\n- Try different models if quota exceeded")
     
     if st.button("🗑 Clear Session", use_container_width=True):
         st.session_state.messages = []
@@ -181,45 +175,20 @@ if prompt := st.chat_input("Enter research topic..."):
         
         try:
             client = genai.Client(api_key=api_key)
+            # Standard Gemini 2.0 Flash call
+            stream = client.models.generate_content_stream(
+                model='gemini-2.0-flash', 
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_PROMPT,
+                    temperature=temp,
+                )
+            )
             
-            # Retry logic for rate limits
-            max_retries = 3
-            retry_delay = 2
-            
-            for attempt in range(max_retries):
-                try:
-                    stream = client.models.generate_content_stream(
-                        model=model,
-                        contents=prompt,
-                        config=types.GenerateContentConfig(
-                            system_instruction=SYSTEM_PROMPT,
-                            temperature=temp,
-                        )
-                    )
-                    
-                    for chunk in stream:
-                        if chunk.text:
-                            full_response += chunk.text
-                            response_placeholder.markdown(full_response + "▌")
-                    
-                    # Success - break retry loop
-                    break
-                    
-                except Exception as retry_error:
-                    error_msg = str(retry_error).lower()
-                    
-                    # Check for quota/rate limit errors
-                    if any(x in error_msg for x in ["quota", "rate_limit", "429", "503"]):
-                        if attempt < max_retries - 1:
-                            wait_time = retry_delay * (attempt + 1)
-                            response_placeholder.warning(
-                                f"⏳ **Quota/Rate limit hit.** Retrying in {wait_time}s... (Attempt {attempt + 1}/{max_retries})"
-                            )
-                            time.sleep(wait_time)
-                            continue
-                    
-                    # If not a retry-able error or max retries reached
-                    raise retry_error
+            for chunk in stream:
+                if chunk.text:
+                    full_response += chunk.text
+                    response_placeholder.markdown(full_response + "▌")
             
             # Finalize rendering
             response_placeholder.empty()
@@ -227,24 +196,4 @@ if prompt := st.chat_input("Enter research topic..."):
             st.session_state.messages.append({"role": "assistant", "content": full_response})
             
         except Exception as e:
-            error_text = str(e)
-            if "quota" in error_text.lower():
-                st.error(
-                    f"❌ **Quota Exceeded**: Free tier limit reached.\n\n"
-                    f"**Solutions:**\n"
-                    f"1. Wait 1-2 hours before trying again\n"
-                    f"2. Switch to a different model in the sidebar\n"
-                    f"3. Upgrade to paid API tier\n\n"
-                    f"Error: {error_text}"
-                )
-            elif "rate_limit" in error_text.lower() or "429" in error_text:
-                st.error(
-                    f"⚠️ **Rate Limit Hit**: Too many requests too quickly.\n\n"
-                    f"**Solutions:**\n"
-                    f"1. Wait a few minutes\n"
-                    f"2. Reduce creativity slider\n"
-                    f"3. Ask simpler questions\n\n"
-                    f"Error: {error_text}"
-                )
-            else:
-                st.error(f"Nexus Core Error: {e}")
+            st.error(f"Nexus Core Error: {e}")
