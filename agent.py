@@ -114,8 +114,7 @@ def execute_viz_code(code_string):
     """Clean and execute Python code safely."""
     # Robustly extract code between backticks if they exist
     if "```python" in code_string:
-        clean_code = code_string.split("```python")[1].split("
-```")[0].strip()
+        clean_code = code_string.split("```python")[1].split("```")[0].strip()
     else:
         clean_code = code_string.strip()
     
